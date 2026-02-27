@@ -1,4 +1,4 @@
-wetterblick - weewx extension that sends data to wetterblick-api.com
+wetterblick - weewx extension that sends data to wetterblick.com
 Adapted in 2026 by MSlabs, special thanks to Matthew Wall (2014-2020) for the original Code.
 Distributed under the terms of the GNU Public License (GPLv3)
 
