@@ -6,7 +6,7 @@ Installation instructions:
 
 1) download
 
-wget -O weewx-wetterblick.zip https://github.com/marcels97/weewx-wetterblick/archive/master.zip
+wget -O weewx-wetterblick.zip https://github.com/marcels97/weewx-wetterblick/archive/main.zip
 
 1) run the installer:
 
