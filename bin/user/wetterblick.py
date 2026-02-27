@@ -56,7 +56,7 @@ except ImportError:
     import syslog
 
     def logmsg(level, msg):
-        syslog.syslog(level, 'Wetter: %s' % msg)
+        syslog.syslog(level, 'Wetterblick: %s' % msg)
 
     def logdbg(msg):
         logmsg(syslog.LOG_DEBUG, msg)
@@ -68,7 +68,7 @@ except ImportError:
         logmsg(syslog.LOG_ERR, msg)
 
 
-class Wetter(weewx.restx.StdRESTful):
+class Wetterblick(weewx.restx.StdRESTful):
     def __init__(self, engine, config_dict):
         """This service recognizes standard restful options plus the following:
 
@@ -76,7 +76,7 @@ class Wetter(weewx.restx.StdRESTful):
 
         password: password
         """
-        super(Wetter, self).__init__(engine, config_dict)        
+        super(Wetterblick, self).__init__(engine, config_dict)
         loginf("service version is %s" % VERSION)
         loginf("wetterblick API version is %s" % API_VERSION)
         site_dict = weewx.restx.get_site_dict(config_dict, 'Wetterblick', 'username', 'password')
@@ -87,7 +87,7 @@ class Wetter(weewx.restx.StdRESTful):
             config_dict, 'wx_binding')
 
         self.archive_queue = queue.Queue()
-        self.archive_thread = WetterThread(self.archive_queue, **site_dict)
+        self.archive_thread = WetterblickThread(self.archive_queue, **site_dict)
         self.archive_thread.start()
         self.bind(weewx.NEW_ARCHIVE_RECORD, self.new_archive_record)
         loginf("Data will be uploaded for station id %s" % site_dict['username'])
@@ -95,50 +95,44 @@ class Wetter(weewx.restx.StdRESTful):
     def new_archive_record(self, event):
         self.archive_queue.put(event.record)
 
-class WetterThread(weewx.restx.RESTThread):
+class WetterblickThread(weewx.restx.RESTThread):
 
-    _SERVER_URL = 'http://interface.wetterarchiv.de/weather'
-    _DATA_MAP = {'hu':  ('outHumidity', '%.0f'), # percent
-                 'te':  ('outTemp',     '%.1f'), # C
-                 'dp':  ('dewpoint',    '%.1f'), # C
-                 'pr':  ('barometer',   '%.1f'), # hPa
-                 'wd':  ('windDir',     '%.0f'), # degrees
-                 'ws':  ('windSpeed',   '%.1f'), # m/s
-                 'wg':  ('windGust',    '%.1f'), # m/s
-                 'pa':  ('hourRain',    '%.2f'), # mm
-                 'rr':  ('rainRate',    '%.2f'), # mm/hr
-                 'uv':  ('UV',          '%.0f'), # uv index
-                 'sr':  ('radiation',   '%.2f'), # W/m^2
-                 'hui': ('inHumidity',  '%.0f'), # percent
-                 'tei': ('inTemp',      '%.1f'), # C
-                 'huo': ('extraHumid1', '%.0f'), # percent
-                 'teo': ('extraTemp1',  '%.1f'), # C
-                 'tes': ('soilTemp1',   '%.1f')  # C
-                 }
+    _SERVER_URL = 'https://wetterblick-api.com/sd'
+    _DATA_MAP = {
+        'temp': ('outTemp', '%.1f'),       # C
+        'relhum': ('outHumidity', '%.0f'), # percent
+        'pressure': ('barometer', '%.1f'), # hPa
+        'wind': ('windSpeed', '%.1f'),     # m/s
+        'gusts': ('windGust', '%.1f'),     # m/s
+        'rain': ('rainRate', '%.2f'),      # mm/hr
+        'rain1h': ('hourRain', '%.2f'),    # mm
+        'rainday': ('dayRain', '%.2f'),    # mm
+        'dewpoint': ('dewpoint', '%.1f')   # C
+    }
 
     def __init__(self, queue, username, password, manager_dict,
                  server_url=_SERVER_URL, skip_upload=False,
                  post_interval=None, max_backlog=sys.maxsize, stale=None,
                  log_success=True, log_failure=True,
                  timeout=60, max_tries=3, retry_wait=5):
-        super(WetterThread, self).__init__(queue,
-                                           protocol_name='Wetterblick',
-                                           manager_dict=manager_dict,
-                                           post_interval=post_interval,
-                                           max_backlog=max_backlog,
-                                           stale=stale,
-                                           log_success=log_success,
-                                           log_failure=log_failure,
-                                           max_tries=max_tries,
-                                           timeout=timeout,
-                                           retry_wait=retry_wait,
-                                           skip_upload=skip_upload)
+        super(WetterblickThread, self).__init__(queue,
+                                                protocol_name='Wetterblick',
+                                                manager_dict=manager_dict,
+                                                post_interval=post_interval,
+                                                max_backlog=max_backlog,
+                                                stale=stale,
+                                                log_success=log_success,
+                                                log_failure=log_failure,
+                                                max_tries=max_tries,
+                                                timeout=timeout,
+                                                retry_wait=retry_wait,
+                                                skip_upload=skip_upload)
         self.username = username
         self.password = password
         self.server_url = server_url
 
     def check_response(self, response):
-        """Override, and check for wetter errors."""
+        """Override, and check for wetterblick errors."""
         txt = response.read().decode().lower()
         if txt.find('"errorcode":"100"') != -1 or \
            txt.find('"errorcode":"101"') != -1 or \
@@ -148,26 +142,45 @@ class WetterThread(weewx.restx.RESTThread):
             raise weewx.restx.FailedPost("Server returned '%s'" % txt)
 
     def format_url(self, in_record):
-        """Override, and format an URL for wetter"""
+        """Override, and format an URL for wetterblick"""
         # put everything into the right units
         record = weewx.units.to_METRICWX(in_record)
 
         # put data into expected scaling, structure, and format
         values = {}
-        values['id'] = self.username
-        values['pwd'] = self.password
-        values['sid'] = 'weewx'
-        values['ver'] = weewx.__version__
-        values['dtutc'] = time.strftime('%Y%m%d%H%M', time.gmtime(record['dateTime']))
+        values['user'] = self.username
+        values['pw'] = self.password
+        values['date'] = time.strftime('%d.%m.%Y', time.localtime(record['dateTime']))
+        values['time'] = time.strftime('%H:%M:%S', time.localtime(record['dateTime']))
         for key in self._DATA_MAP:
             rkey = self._DATA_MAP[key][0]
             if rkey in record and record[rkey] is not None:
                 values[key] = self._DATA_MAP[key][1] % record[rkey]
+            else:
+                values[key] = ''
+
+        values['wind-dir'] = self._deg_to_compass(record.get('windDir'))
+        values['sensor-time'] = ''
+        values['air-pressure-tendency-text'] = ''
+        values['air-pressure-tendency-3h'] = ''
 
         url = "%s?%s" % (self.server_url, urlencode(values))
         if weewx.debug >= 2:
-            logdbg('url: %s' % re.sub(r"passwort=[^\&]*", "passwort=XXX", url))
+            logdbg('url: %s' % re.sub(r"pw=[^\&]*", "pw=XXX", url))
         return url
+
+    @staticmethod
+    def _deg_to_compass(deg):
+        if deg is None:
+            return ''
+        try:
+            deg = float(deg) % 360.0
+        except (TypeError, ValueError):
+            return ''
+        dirs = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE',
+                'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW']
+        idx = int((deg + 11.25) / 22.5) % 16
+        return dirs[idx]
 
 
 # Do direct testing of this extension like this:
@@ -179,10 +192,10 @@ if __name__ == "__main__":
 
     try:
         # WeeWX V4 logging
-        weeutil.logger.setup('wetter', {})
+        weeutil.logger.setup('wetterblick', {})
     except NameError:
         # WeeWX V3 logging
-        syslog.openlog('wetter', syslog.LOG_PID | syslog.LOG_CONS)
+        syslog.openlog('wetterblick', syslog.LOG_PID | syslog.LOG_CONS)
         syslog.setlogmask(syslog.LOG_UPTO(syslog.LOG_DEBUG))
 
     usage = """%prog --user USERNAME --pw PASSWORD [--version] [--help]"""
@@ -196,7 +209,7 @@ if __name__ == "__main__":
     (options, args) = parser.parse_args()
 
     if options.version:
-        print("wetter uploader version %s" % VERSION)
+        print("wetterblick uploader version %s" % VERSION)
         exit(0)
 
     if options.user is None or options.pw is None:
@@ -204,7 +217,7 @@ if __name__ == "__main__":
 
     print("Using username '%s' and password '%s'" % (options.user, options.pw))
     q = queue.Queue()
-    t = WetterThread(q, options.user, options.pw, manager_dict=None)
+    t = WetterblickThread(q, options.user, options.pw, manager_dict=None)
     t.start()
     q.put({'dateTime': int(time.time() + 0.5),
            'usUnits': weewx.US,

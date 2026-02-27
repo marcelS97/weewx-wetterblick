@@ -1,5 +1,5 @@
-wetterblick - weewx extension that sends data to wetterblick.com
-Adapted in 2026 by MSlabs, special thanks to Matthew Wall (2024-2020) for the original Code.
+wetterblick - weewx extension that sends data to wetterblick-api.com
+Adapted in 2026 by MSlabs, special thanks to Matthew Wall (2014-2020) for the original Code.
 Distributed under the terms of the GNU Public License (GPLv3)
 
 Installation instructions:
@@ -15,7 +15,7 @@ wee_extension -install weewx-wetterblick.zip
 2) modify weewx.conf:
 
 [StdRESTful]
-    [[Wetter]]
+    [[Wetterblick]]
         username = USERNAME
         password = PASSWORD
 
@@ -23,3 +23,8 @@ wee_extension -install weewx-wetterblick.zip
 
 sudo /etc/init.d/weewx stop
 sudo /etc/init.d/weewx start
+
+Notes:
+- Data is sent via HTTP GET to https://wetterblick-api.com/sd
+- Date/time are sent in local time in the format dd.mm.yyyy and HH:MM:SS
+- Wind direction is sent as compass text (N, NNE, NE, ...). Missing optional fields are sent empty.
