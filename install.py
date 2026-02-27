@@ -15,7 +15,7 @@ class WetterblickInstaller(ExtensionInstaller):
             description='Upload weather data to wetterblick.com.',
             author="Matthew Wall + MSlabs",
             author_email="",
-            restful_services='user.wetter.Wetterblick',
+            restful_services='user.wetterblick.Wetterblick',
             config={
                 'StdRESTful': {
                     'Wetterblick': {
