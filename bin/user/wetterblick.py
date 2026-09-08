@@ -3,11 +3,14 @@
 Upload data to wetterblick.com
   https://wetterblick.com
 
+Register the station at https://www.wetterblick.com/netzwerk -- the station key
+shown there goes into `password`, the station name into `username`.
+
 [StdRESTful]
     [[Wetterblick]]
         enable = true | false
-        username = STATION ID
-        password = STATION PASSWORD
+        username = STATION NAME
+        password = STATION KEY
 """
 
 try:
@@ -29,7 +32,7 @@ import weewx
 import weewx.restx
 import weewx.units
 
-VERSION = "0.1"
+VERSION = "0.2"
 API_VERSION = "1.0.0 - 2026/02/01"
 
 if weewx.__version__ < "3":
@@ -98,16 +101,22 @@ class Wetterblick(weewx.restx.StdRESTful):
 class WetterblickThread(weewx.restx.RESTThread):
 
     _SERVER_URL = 'https://wetterblick-api.com/sd'
+    # Zielfeld -> (Feld im weewx-Datensatz, Format, Faktor)
+    #
+    # Die Werte kommen aus to_METRICWX (C, hPa, mm, m/s). Wetterblick erwartet
+    # den Wind in km/h, deshalb der Faktor 3.6 -- ohne ihn landen die Böen mit
+    # rund einem Drittel ihres Werts in der Datenbank, was plausibel aussieht
+    # und deshalb niemandem auffällt.
     _DATA_MAP = {
-        'temp': ('outTemp', '%.1f'),       # C
-        'relhum': ('outHumidity', '%.0f'), # percent
-        'pressure': ('barometer', '%.1f'), # hPa
-        'wind': ('windSpeed', '%.1f'),     # m/s
-        'gusts': ('windGust', '%.1f'),     # m/s
-        'rain': ('rainRate', '%.2f'),      # mm/hr
-        'rain1h': ('hourRain', '%.2f'),    # mm
-        'rainday': ('dayRain', '%.2f'),    # mm
-        'dewpoint': ('dewpoint', '%.1f')   # C
+        'temp': ('outTemp', '%.1f', 1.0),        # C
+        'relhum': ('outHumidity', '%.0f', 1.0),  # percent
+        'pressure': ('barometer', '%.1f', 1.0),  # hPa
+        'wind': ('windSpeed', '%.1f', 3.6),      # m/s -> km/h
+        'gusts': ('windGust', '%.1f', 3.6),      # m/s -> km/h
+        'rain': ('rain', '%.2f', 1.0),           # mm im Archivintervall
+        'rain1h': ('hourRain', '%.2f', 1.0),     # m
+        'rainDay': ('dayRain', '%.2f', 1.0),     # mm
+        'dewpoint': ('dewpoint', '%.1f', 1.0)    # C
     }
 
     def __init__(self, queue, username, password, manager_dict,
@@ -153,9 +162,9 @@ class WetterblickThread(weewx.restx.RESTThread):
         values['date'] = time.strftime('%d.%m.%Y', time.localtime(record['dateTime']))
         values['time'] = time.strftime('%H:%M:%S', time.localtime(record['dateTime']))
         for key in self._DATA_MAP:
-            rkey = self._DATA_MAP[key][0]
+            rkey, fmt, factor = self._DATA_MAP[key]
             if rkey in record and record[rkey] is not None:
-                values[key] = self._DATA_MAP[key][1] % record[rkey]
+                values[key] = fmt % (record[rkey] * factor)
             else:
                 values[key] = ''
 
